@@ -1,0 +1,129 @@
+import asyncio
+import websockets
+
+# Создаем список клиентов и список имен
+clients = []
+names = []
+
+async def server(websocket, path):
+    # Добавляем нового клиента в список
+    clients.append(websocket)
+
+    try:
+        # Ожидаем представления от пользователя
+        name = await websocket.recv()
+        names.append(name)
+
+        # Отправляем приветственное сообщение
+        message = f"Добро пожаловать, {name}! В чате уже присутствуют: "
+        if len(names) == 1:
+            message += "Вы первый в чате."
+        else:
+            message += ", ".join(names[:-1]) + " и " + names[-1]
+            for client in clients:
+                await client.send(f"К нам присоединился {name}.")
+
+        await websocket.send(message)
+
+        while True:
+            # Читаем сообщение от клиента
+            message = await websocket.recv()
+
+            # Рассылаем сообщение всем клиентам
+            for client in clients:
+                await client.send(f"{name}: {message}")
+    finally:
+        # Удаляем клиента из списков при его отключении
+        clients.remove(websocket)
+        names.remove(name)
+
+        # Отправляем сообщение о выходе клиента
+        for client in clients:
+            await client.send(f"{name} нас покинул.")
+
+# Запускаем сервер на localhost:8000
+start_server = websockets.serve(server, "localhost", 8000)
+
+# Запускаем сервер в бесконечном цикле
+asyncio.get_event_loop().run_until_complete(start_server)
+asyncio.get_event_loop().run_forever()
+А вот обновленный клиентский код:
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Chat</title>
+</head>
+<body>
+    <input id="name-input" type="text" placeholder="Введите ваше имя">
+    <button id="name-button">Представиться</button>
+    <input id="message-input" type="text" placeholder="Введите сообщение">
+    <button id="send-button">Отправить</button>
+    <div id="message-output"></div>
+
+    <script>
+        const socket = new WebSocket('ws://localhost:8000');
+
+        // Обработчик события открытия соединения
+        socket.onopen = function(event) {
+            console.log('WebSocket connection opened');
+        };
+
+        // Обработчик события получения сообщения от сервера
+        socket.onmessage = function(event) {
+            const messageOutput = document.getElementById('message-output');
+            const message = event.data;
+
+            // Добавляем сообщение в начало списка
+            messageOutput.innerHTML = '<p>' + message + '</p>' + messageOutput.innerHTML;
+        };
+
+        // Обработчик события закрытия соединения
+        socket.onclose = function(event) {
+            console.log('WebSocket connection closed');
+        };
+
+        // Функция отправки имени на сервер
+        function sendName() {
+            const nameInput = document.getElementById('name-input');
+            const name = nameInput.value;
+
+            // Отправляем имя на сервер
+            socket.send(name);
+
+            // Блокируем поле ввода имени и кнопку
+            nameInput.disabled = true;
+            document.getElementById('name-button').disabled = true;
+        }
+
+        // Функция отправки сообщения на сервер
+        function sendMessage() {
+            const messageInput = document.getElementById('message-input');
+            const message = messageInput.value;
+
+            // Отправляем сообщение на сервер
+            socket.send(message);
+
+            // Очищаем поле ввода
+            messageInput.value = "";
+        }
+
+        // Обработчик события нажатия клавиши Enter в поле ввода сообщения
+        document.getElementById('message-input').addEventListener('keyup', function(event) {
+            if (event.keyCode === 13) {
+                sendMessage();
+            }
+        });
+
+        // Обработчик события нажатия кнопки отправки сообщения
+        document.getElementById('send-button').addEventListener('click', function(event) {
+            sendMessage();
+        });
+
+        // Обработчик события нажатия кнопки представления
+        document.getElementById('name-button').addEventListener('click', function(event) {
+            sendName();
+        });
+    </script>
+</body>
+</html>
